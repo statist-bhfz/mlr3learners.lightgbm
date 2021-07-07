@@ -607,11 +607,6 @@ LearnerClassifLightGBM = R6::R6Class(
     # from importance and from prediction)
     dtrain = NULL,
     .train = function(task) {
-      # extract training data
-
-      data = task$data()
-      # create training label
-      label = data[, get(task$target_names)]
 
       # Patrick: A param should not be auto-set within the train call
       # Just require this to be set by the user.
@@ -626,7 +621,7 @@ LearnerClassifLightGBM = R6::R6Class(
       # copied one with "mutliclass only.
       #
       # guess objective (for mlr3learners autotest)
-      n = length(unique(label))
+      n = length(unique(task$data(cols = task$target_names)[[1]]))
 
       if (is.null(self$param_set$values[["objective"]])) {
         if (n == 2) {
@@ -642,7 +637,7 @@ LearnerClassifLightGBM = R6::R6Class(
       # we need to convert it to integers and keep the mappings
       # in order to be able to restore them later for the predictions
       label = private$transform_target(
-        vector = data[, get(task$target_names)],
+        vector = task$data(cols = task$target_names)[[1]],
         positive = task$positive,
         negative = task$negative,
         mapping = "dtrain"
@@ -650,21 +645,19 @@ LearnerClassifLightGBM = R6::R6Class(
       # store the class label names
       private$label_names = sort(unique(label))
 
-      # Patrick: Next "uff" :D
-      # Lorenz: I know :) I will move this to an external function
-      # "backend_preprocessing" in the future. Maybe also with the
-      # above-mentioned target-trafo. Then we will have to check for
-      # numeric targets only at the beginning of the training.
-
       # prepare data for lightgbm
-      data = lightgbm::lgb.prepare(data)
+      data = task$data(
+        cols = task$feature_names,
+        data_format = "data.table"
+      )
 
       # create lightgbm dataset
       private$dtrain = lightgbm::lgb.Dataset(
-        data = as.matrix(data[, task$feature_names, with = F]),
+        data = as.matrix(data),
         label = label,
         free_raw_data = FALSE
       )
+
       # set weights in dtrain (if available in task)
       if ("weights" %in% task$properties) {
         lightgbm::setinfo(
@@ -738,19 +731,18 @@ LearnerClassifLightGBM = R6::R6Class(
       )
     },
     .predict = function(task) {
-      newdata = task$data(cols = task$feature_names) # get newdata
+      newdata = task$data(
+        cols = task$feature_names,
+        data_format = "data.table"
+      ) # get newdata
       data.table::setcolorder(
         newdata,
         private$dtrain$get_colnames()
       )
       # create lgb.Datasets
-      test_input = lightgbm::lgb.prepare(
-        newdata
-      )
-      test_data = as.matrix(test_input)
       p = mlr3misc::invoke(
         .f = self$model$predict
-        , data = test_data
+        , data = as.matrix(newdata)
         , reshape = TRUE
       )
       if (self$param_set$values[["objective"]] %in%

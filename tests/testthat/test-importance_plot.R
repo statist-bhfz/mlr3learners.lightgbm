@@ -1,8 +1,9 @@
-context("Test Classification")
+context("Test importance_plot")
 
 test_that(
-  desc = "Learner Classification",
+  desc = "Testing plot",
   code = {
+
     library(mlbench)
     data("PimaIndiansDiabetes2")
     dataset = data.table::as.data.table(PimaIndiansDiabetes2)
@@ -35,22 +36,16 @@ test_that(
         "early_stopping_round" = 3,
         "learning_rate" = 0.1,
         "seed" = 17L,
-        "metric" = "auc",
-        "num_iterations" = 10
+        "num_iterations" = 10,
+        "metric" = "auc"
       )
     )
     learner$train(task, row_ids = split$train_index)
 
-    expect_equal(learner$model$current_iter(), 10L)
+    importance  = learner$importance()
 
-    predictions = learner$predict(task, row_ids = split$test_index)
+    expect_length(importance, 8)
 
-    expect_known_hash(predictions$response, "b8b6d3c1bd") # 264f358a7c
-    importance = learner$importance()
-
-    expect_equal(
-      round(importance[["glucose"]], 4),
-      round(0.45686638496446557722, 4)
-    )
+    expect_class(importance_plot(importance), c("gg", "ggplot"))
   }
 )

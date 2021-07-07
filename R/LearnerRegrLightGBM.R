@@ -589,21 +589,23 @@ LearnerRegrLightGBM = R6::R6Class(
     # from importance and from prediction)
     dtrain = NULL,
     .train = function(task) {
-      # extract training data
-      data = task$data()
 
       # get label
-      label = data[, get(task$target_names)]
+      label = task$data(cols = task$target_names)[[1]]
 
       # prepare data for lightgbm
-      data = lightgbm::lgb.prepare(data)
+      data = task$data(
+        cols = task$feature_names,
+        data_format = "data.table"
+      )
 
       # create lightgbm dataset
       private$dtrain = lightgbm::lgb.Dataset(
-        data = as.matrix(data[, task$feature_names, with = F]),
+        data = as.matrix(data),
         label = label,
         free_raw_data = FALSE
       )
+
       # set weights in dtrain (if available in task)
       if ("weights" %in% task$properties) {
         lightgbm::setinfo(
@@ -677,19 +679,18 @@ LearnerRegrLightGBM = R6::R6Class(
       ) # use the mlr3misc::invoke function (it's similar to do.call())
     },
     .predict = function(task) {
-      newdata = task$data(cols = task$feature_names) # get newdata
+      newdata = task$data(
+        cols = task$feature_names,
+        data_format = "data.table"
+      ) # get newdata
       data.table::setcolorder(
         newdata,
         private$dtrain$get_colnames()
       )
       # create lgb.Datasets
-      test_input = lightgbm::lgb.prepare(
-        newdata
-      )
-      test_data = as.matrix(test_input)
       p = mlr3misc::invoke(
         .f = self$model$predict
-        , data = test_data
+        , data = as.matrix(newdata)
         , reshape = TRUE
       )
       mlr3::PredictionRegr$new(
